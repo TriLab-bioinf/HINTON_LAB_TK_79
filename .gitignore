@@ -10,3 +10,11 @@ data
 read_counts_deseq2_normalized.txt
 results
 ~$Aseq_analysis_methods_TK_79.docx
+results_LF82/
+results_MG1655/01_aux_rnaseq_functions.R
+results_MG1655/02_Gene_enrichment_functions.R
+results_MG1655/05correlation/
+results_MG1655/05counts/
+results_MG1655/06fastqc_raw/
+results_MG1655/06fastqc_trim/
+results_MG1655/07multiqc/
