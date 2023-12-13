@@ -197,8 +197,9 @@ rule multiqc:
            i3 = expand("results/03map_reads/{s}.Log.final.out", s = samples),
            i5 = "results/05counts/read_counts.summary",
            i6 = "results/05correlation/multiBamSummary.results.npz",
-           i7 = expand("results/06fastqc_raw/{s}_fastqc.html", s = samples),
-           i8 = expand("results/06fastqc_trim/{s}.trimmed_fastqc.html", s = samples)
+           i7 = expand("results/05bigwig/{s}.bw", s = samples),
+           i8 = expand("results/06fastqc_raw/{s}_fastqc.html", s = samples),
+           i9 = expand("results/06fastqc_trim/{s}.trimmed_fastqc.html", s = samples)
     output: "results/07multiqc/multiqc_report.html"
     resources:
         partition = "quick",
