@@ -9,23 +9,24 @@ output:
 ---
 
 #### Load libraries
+
 ```{r load libraries}
-pacman::p_load(pheatmap,EnhancedVolcano,ggpubr,DESeq2,stringr,biomaRt,tidyverse,pcaExplorer,VennDiagram,clusterProfiler,GOSemSim,ggsci,viridis,ggrepel,RColorBrewer,msigdbr,cowplot,enrichplot,ggupset,broom,ggraph)
+pacman::p_load(AnnotationDbi,pheatmap,EnhancedVolcano,ggpubr,DESeq2,stringr,biomaRt,tidyverse,pcaExplorer,VennDiagram,clusterProfiler,GOSemSim,ggsci,viridis,ggrepel,RColorBrewer,msigdbr,cowplot,enrichplot,ggupset,broom,ggraph)
 
 ```
 
-#### Define functions
-```{r aux functions}
-
-# Load auxyliary functions
-source(file = "./01_aux_rnaseq_functions.R")
-
-# Load enrichment functions
-source(file = "./02_Gene_enrichment_functions.R")
-
-```
 
 ```{r}
+
+#
+# --- Function to remove all-zero rows (by adjusting min_total_count the function can filter out rows based on total counts other than 0) ---
+#
+remove_all_zero_rows <- function(df, min_total_count = 0){
+  df <- df[rowSums(df) > min_total_count,]
+  return(df)
+}
+
+
 #
 # --- function for PCA plots ---
 #
@@ -82,10 +83,10 @@ plot_PCA = function(object, color_by="condition",
 
 ```
 
-
 #### Load read counts data
+
 ```{r Loading data}
-all.star <- read.delim2("./data/read_counts.txt", sep = "\t", header = TRUE, row.names = 1, comment.char = c("#") )
+all.star <- read.delim2("../results_MG1655/data/read_counts_MG1655.txt", sep = "\t", header = TRUE, row.names = 1, comment.char = c("#") )
 
 format_star <- function(star_file){
   names(star_file) <- names(star_file) %>% 
@@ -107,12 +108,17 @@ all <- remove_all_zero_rows(all, min_total_count = 0)
 ```
 
 #### Make metadata table from 'all'
+
 ```{r}
 # Load metadata
-metadata <- read.delim2("./data/metadata.csv", sep = ",", header = TRUE, row.names = 1, comment.char = c("#") )
+metadata <- read.delim2("./data/metadata.csv", 
+                        sep = ",", 
+                        header = TRUE, 
+                        row.names = 1, 
+                        comment.char = c("#") )
 
 # sort all columns based on metadata row names
-all <- all %>% select(rownames(metadata))
+all <- all %>% dplyr::select(rownames(metadata))
 
 # Add total read counts and sample id columns to metadata
 metadata$read_counts <- colSums(all)
@@ -124,7 +130,7 @@ metadata$sample_name <- rownames(metadata)
 metadata$treatment <- str_remove(metadata$treatment, pattern = "Grown at ")
 
 # Kepp columns of interest
-metadata <- metadata %>% select(c("genotype","treatment","read_counts","sample_name"))
+metadata <- metadata %>% dplyr::select(c("genotype","treatment","read_counts","sample_name"))
 
 # change label for mutant
 metadata[metadata$genotype == "RpoD D445V mutant","genotype"] <- "mutant"
@@ -134,16 +140,47 @@ metadata$group <- paste(metadata$treatment,metadata$genotype, sep = "_")
 
 ```
 
-
 #### Normalize data to TPMs to run some comparative analysis across samples
+
 ```{r}
+# Function to normalize by TPMs based on transcript length
+# Normalize counts to TPMs
+# Fetch exon length from STAR read counts file 
+normalize_by_TPM <- function(counts.df, gene_length) {
+  
+  # Calculate transcript length in Kb
+  transcript_lengths <- gene_length / 1000
+  transcript_lengths <- subset(transcript_lengths, rownames(transcript_lengths) %in% rownames(counts.df))
+  
+  # Eliminate gene IDs from counts.df without transcript length info in transcript_lengths
+  #transcript_lengths <- transcript_lengths[transcript_lengths$Category %in% rownames(counts.df),]
+  #counts.df <- counts.df[transcript_lengths$Category,]
+  
+  # Sort transcripts_length df by rownames of counts.df
+  transcript_lengths <- transcript_lengths[rownames(counts.df),, drop=F]
+
+  # See reference for formula
+  # https://btep.ccr.cancer.gov/question/faq/what-is-the-difference-between-rpkm-fpkm-and-tpm/
+  x.df <- apply(counts.df, 
+                MARGIN = 2, 
+                FUN = function(x){ 
+                                  reads_per_kb <- x/transcript_lengths$Length
+                                  pmsf <- sum(reads_per_kb) / 1e6
+                                  reads_per_kb/pmsf
+                                  }
+                )
+  
+  return(x.df)
+}
+
 # Using annotation version GRCm39 (current)
-all.tpm <- normalize_by_TPM(counts.df = all, gene_length = select(all.star, c("Length")))
+all.tpm <- normalize_by_TPM(counts.df = all, 
+                            gene_length = dplyr::select(all.star, c("Length")))
 ```
 
-###########################################
+########################################### 
 # Analysis of expression data using DESeq2
-###########################################
+########################################### 
 
 ```{r deseq2}
 # Convert metadata to factors
@@ -180,7 +217,6 @@ ggsave2("Plots/barplot_read_counts.pdf", plot = p)
 print(p)
 ```
 
-
 ```{r}
 # Normalize counts
 vsd.one <- vst(dds.all, blind=FALSE)
@@ -206,6 +242,7 @@ p.pheatmap <- pheatmap(sampleDistMatrix,
          col=colors)
 
 ggsave2(filename = "unsupervised_clustering_rnaseq_profile_20plus_reads.pdf", plot = p.pheatmap, path = "./Plots")
+
 print(p.pheatmap)
 ```
 
@@ -240,11 +277,13 @@ ggsave(paste0("Plots/pca_PC23_Group.pdf"), plot = pca_23.p)
 print(pca_23.p)
 
 ```
+
 PCA analysis shows that samples separate by genotype and treatment.
 
 ### resultsNames(dds)
 
-#### Filtering out poorly-expressed genes (less than 20 reads across all samples) 
+#### Filtering out poorly-expressed genes (less than 20 reads across all samples)
+
 ```{r filtering genes based on total counts of reads}
 
 # Keep genes with at least 10 reads total across samples
@@ -253,8 +292,8 @@ dds_res <- dds_res[keep,]
 
 ```
 
-
 ##### Using groups instead of interactions
+
 ```{r}
 ensembl_to_symbol <- read.delim(file = "./data/gene_names.txt", col.names = c("Ensembl_ID","gene_name"), header = F)
 
@@ -281,8 +320,6 @@ sort_and_write_res_table <- function(result_table, file_name){
 
 ```{r}
 # Calculate DE for all_data samples
-#design(dds.rnaseA) <- ~Treatment # Removid Read.depth from formula given that all samples are Read.depth = High
-
 dds_res$group <- relevel(dds_res$group, "37oC_WT")
 dds_res <- DESeq(dds_res)
 my_contrasts <- resultsNames(dds_res)
@@ -292,8 +329,6 @@ my_contrasts <- resultsNames(dds_res)
 # 37oC mutant vs WT
 res_mut_vs_WT_37C <- lfcShrink(dds_res, coef = my_contrasts[4], type = "ashr", )
 res_mut_vs_WT_23C <- lfcShrink(dds_res, contrast = c("group", "23oC_mutant", "23oC_WT"), type = "ashr", )
-# Another way to get the same reult as res_mut_vs_WT_23C
-#res_mut_vs_WT_23C_2 <- lfcShrink(dds_res, contrast = c(0, 1, -1, 0), type = "ashr", )
 
 summary(res_mut_vs_WT_37C, alpha = 0.05)
 summary(res_mut_vs_WT_23C, alpha = 0.05)
@@ -305,11 +340,111 @@ res_mut_vs_WT_23C_sorted <- sort_and_write_res_table(result_table = res_mut_vs_W
 
 
 ```
+
 ```{r}
 table_counts_normalized <- counts(dds_res, normalized=TRUE)
 write.table(x = as.data.frame(table_counts_normalized), file = "read_counts_deseq2_normalized.txt", sep = "\t", col.names = NA)
 ```
+
+#### Genes of interest
+```{r}
+genes_of_interest <- c("metE","ampC","fucI","aceB","shiA", "ybgD", "mlaA", "cysZ", "acrZ", "bcr","sppA","lptM","dapF","yigA","xerC","yigB","yobH","ruvA","zapC","mdtK")
+```
+
+
+
+#### Generate volcano plots
+```{r}
+
+volcano_plot_with_ids <- function(res.tmp, log_scale = FALSE, gene_list){
+  vp <- EnhancedVolcano(res.tmp, 
+                        lab = res.tmp$Gene_name, 
+                        x = 'log2FoldChange', 
+                        y = 'padj',
+                        pCutoff = 0.05,
+                        FCcutoff = 1,
+                        pointSize = 1,
+                        colAlpha = 4/5,
+                        labSize = 3,  # Controls labels size
+                        labCol = "black",
+                        title = '',
+                        titleLabSize = 10,
+                        subtitle = '', # add subtitle here
+                        subtitleLabSize = 10,
+                        legendPosition = 'right',
+                        legendLabSize = 10,
+                        legendIconSize = 4.0,
+                        axisLabSize = 10,
+                        drawConnectors = TRUE,
+                        selectLab = gene_list, # vector of gene symbols to label on volcanoplot
+                        boxedLabels = FALSE,
+                        gridlines.major = FALSE,
+                        gridlines.minor = FALSE,
+                        hlineCol = "gray", vlineCol = "gray"
+  )
   
+  #theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+  
+  if (log_scale){
+    vp <- vp + scale_x_log10()
+  }
+  
+  
+  return(vp)
+}
+
+
+vp1 <- volcano_plot_with_ids(res.tmp = res_mut_vs_WT_37C_sorted,
+                               log_scale = FALSE, 
+                               gene_list = genes_of_interest)
+                               
+ggsave(filename = paste0("./Plots/mut_vs_WT_37C_VolcanoPlot.pdf"), 
+       plot = vp1, width = 6, height = 6)
+
+vp2 <- volcano_plot_with_ids(res.tmp = res_mut_vs_WT_23C_sorted, 
+                               log_scale = FALSE, 
+                               gene_list =genes_of_interest
+                               )
+
+ggsave(filename = paste0("./Plots/mut_vs_WT_23C_VolcanoPlot.pdf"), 
+       plot = vp2, width = 6, height = 6)
+
+print(vp1)
+print(vp2)
+```
+
+#### Plot heatmaps
+```{r}
+#genes_of_interest.ensmbl <- rownames(head(assay(rlog.one)))
+genes_of_interest.names<- subset(ensembl_to_symbol, gene_name %in% genes_of_interest)
+
+# Specify colors
+ann_colors = list(
+    genotype = c(mutant = "white", WT = "firebrick"),
+    treatment = c("23oC" = "#1B9E77", "37oC" = "#D95F02"))
+
+annot_col <- as.data.frame(dplyr::select(metadata,c("genotype","treatment")))
+
+p1.heatmap <- pheatmap(assay(rlog.one)[genes_of_interest.names$Ensembl_ID,], 
+          cluster_rows=T, 
+          show_rownames=TRUE,
+          cluster_cols=T, 
+          annotation_col = annot_col, 
+         labels_row = genes_of_interest.names$gene_name, 
+         labels_col = metadata$group, 
+         annotation_colors = ann_colors)
+
+
+
+ggsave2(filename = "mut_vs_wt_heatmap.pdf", plot = p1.heatmap, path = "./Plots", width = 7, height = 5)
+```
+
+
+# Get DESeq-normalized counts
+```{r}
+table_counts_normalized <- counts(dds_res, normalized=TRUE)
+write.table(x = as.data.frame(table_counts_normalized), file = "read_counts_deseq2_normalized.txt", sep = "\t", col.names = NA)
+```
 
 ```{r}
 print(sessionInfo())
