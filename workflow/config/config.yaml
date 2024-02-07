@@ -1,0 +1,25 @@
+# Metadata
+reference:
+    abundant_rna_file: NA
+    ensembl_ver: GCF_000005845.2
+    ensembl_gtf: data/00ref/MG1655_LF82_RS00415.gtf
+    genome_build: GCF_000005845.2
+    genome_file: data/00ref/MG1655.fna
+    star_index: 00ref
+    genome_source: NCBI
+remove_duplicated_reads: false
+star_db:
+    sjdbOverhang: 42
+samples:
+    SRR22989389:
+    SRR22989391:
+    SRR22989390:
+    SRR22989392:
+    SRR22989396:
+    SRR22989394:
+    SRR22989398:
+    SRR22989395:
+    SRR22989399:
+    SRR22989400:
+    SRR22989397:
+    SRR22989393:
